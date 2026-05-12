@@ -1,0 +1,192 @@
+[project]
+name = "dijla"
+version = "0.1.0"
+description = "Dual-core self-amplifying scientific platform for formal mathematics and GNN robustness certification."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Diwan Fatayi" }]
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.30.0",
+  "pydantic>=2.8.0",
+  "pydantic-settings>=2.5.0",
+  "sqlalchemy[asyncio]>=2.0.32",
+  "asyncpg>=0.29.0",
+  "aiosqlite>=0.20.0",
+  "alembic>=1.13.2",
+  "langgraph>=0.2.50",
+  "langgraph-checkpoint>=2.0.0",
+  "langgraph-checkpoint-sqlite>=2.0.0",
+  "langgraph-checkpoint-postgres>=2.0.0",
+  "mcp>=1.0.0",
+  "minio>=7.2.7",
+  "neo4j>=5.23.0",
+  "structlog>=24.4.0",
+  "httpx>=0.27.0",
+  "anyio>=4.4.0",
+  "typer>=0.12.5",
+  "tenacity>=9.0.0",
+  "prometheus-client>=0.20.0",
+  "python-multipart>=0.0.9",
+  "orjson>=3.10.7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.2",
+  "pytest-asyncio>=0.24.0",
+  "pytest-cov>=5.0.0",
+  "hypothesis>=6.111.0",
+  "respx>=0.21.1",
+  "freezegun>=1.5.1",
+  "ruff>=0.6.4",
+  "mypy>=1.11.2",
+  "pre-commit>=3.8.0",
+  "detect-secrets>=1.5.0",
+  "types-requests>=2.32.0.20240712",
+]
+
+[project.scripts]
+dijla = "dijla.cli:app"
+mcp-lean4 = "dijla.mcp_servers.lean4:run"
+mcp-agnncert = "dijla.mcp_servers.agnncert:run"
+mcp-rcgnn = "dijla.mcp_servers.rcgnn:run"
+
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dijla"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E", "F", "W",         # pycodestyle, pyflakes
+  "I",                    # isort
+  "N",                    # pep8-naming
+  "B",                    # bugbear
+  "UP",                   # pyupgrade
+  "S",                    # bandit
+  "A",                    # builtins shadowing
+  "C4",                   # comprehensions
+  "RET",                  # return
+  "SIM",                  # simplify
+  "PL",                   # pylint
+  "RUF",                  # ruff-specific
+  "ASYNC",                # async best practice
+  "PIE",
+  "T20",                  # no print
+  "ERA",                  # eradicate
+]
+ignore = [
+  "S101",    # assert used (allowed in tests)
+  "PLR0913", # too many arguments (use cases need these)
+  "PLR2004", # magic-value (fine in tests + small constants)
+  "PLR0911", # too many returns (supervisor router is a clear switch)
+  "PLC0415", # nested import (used to keep optional deps optional)
+  "RET504",  # unnecessary assignment before return (often clearer that way)
+  "E501",    # line length handled by formatter
+  "ASYNC110", # async sleep-loop heuristic, false positives in mocks
+  "ASYNC230", # blocking I/O in async; the in-memory mocks are fine
+  "RUF029",   # async without await — true for many test helpers
+  "TRY003",   # long messages in exceptions; fine for domain errors
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S311", "PLR2004", "ASYNC230", "SIM117", "PLC0415", "F401"]
+"src/dijla/mcp_servers/**" = ["T201"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+disallow_any_generics = true
+plugins = ["pydantic.mypy"]
+mypy_path = "src"
+namespace_packages = true
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = [
+  "gqlalchemy.*",
+  "neo4j.*",
+  "minio.*",
+  "langgraph.*",
+  "langchain.*",
+  "langchain_core.*",
+  "mcp.*",
+  "structlog.*",
+  "freezegun.*",
+  "respx.*",
+  "prometheus_client.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_decorators = false
+disable_error_code = ["misc", "no-untyped-def"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = [
+  "-ra",
+  "--strict-markers",
+  "--strict-config",
+  "--cov=src/dijla",
+  "--cov-report=term-missing",
+  "--cov-report=xml",
+  "--cov-fail-under=85",
+]
+markers = [
+  "integration: requires external services (postgres, memgraph, minio).",
+  "slow: slow tests excluded from the fast smoke suite.",
+]
+filterwarnings = [
+  "ignore::DeprecationWarning",
+  "ignore::PendingDeprecationWarning",
+  "ignore::UserWarning",
+  "ignore::ResourceWarning",
+]
+
+[tool.coverage.run]
+source = ["src/dijla"]
+branch = true
+omit = [
+  "src/dijla/mcp_servers/__main__.py",
+  "src/dijla/main.py",
+  "src/dijla/cli.py",
+  # Production-only adapters that require live infra (PostgreSQL / Memgraph /
+  # MinIO / spawned MCP subprocesses); excluded because they cannot run inside
+  # the unit-test sandbox. They are exercised in `docker compose up` smoke
+  # tests during CI.
+  "src/dijla/infrastructure/persistence/models.py",
+  "src/dijla/infrastructure/persistence/session.py",
+  "src/dijla/infrastructure/graph/client.py",
+  "src/dijla/infrastructure/object_store/client.py",
+  "src/dijla/infrastructure/mcp_clients/stdio.py",
+]
+
+[tool.coverage.report]
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "pragma: no cover",
+  "@overload",
+]
+show_missing = true
+skip_covered = false
