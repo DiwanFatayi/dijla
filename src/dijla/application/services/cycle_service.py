@@ -232,9 +232,7 @@ class CycleService:
                 else Verdict.OPEN.value,
             },
         )
-        cycle = cycle.with_result(**update).with_status(
-            CycleStatus.COMPLETED, completed=True
-        )
+        cycle = cycle.with_result(**update).with_status(CycleStatus.COMPLETED, completed=True)
         cycle = cycle.model_copy(update={"completed_at": datetime.now(UTC)})
         await self._cycles.update(cycle)
         await self._append_event(
